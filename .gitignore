@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+build/
+**/build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment and local runtime settings
+.env
+.env.*
+!.env.example
+.claude.json
+config/app-settings.local.json
+app/config/app-settings.local.json
+
+# Local databases and generated data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.local-cache/
+app/.local-cache/
+app/.smoke-storage/
+app/.test-storage/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

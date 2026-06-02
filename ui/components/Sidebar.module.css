@@ -1,0 +1,43 @@
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: #111827;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  flex-shrink: 0;
+}
+.logo {
+  padding: 20px 20px 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  border-bottom: 1px solid #1f2937;
+  letter-spacing: 0.02em;
+}
+.logoSub { font-size: 0.7rem; color: #6b7280; font-weight: 400; display: block; margin-top: 2px }
+.nav { flex: 1; padding: 12px 0; }
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: #9ca3af;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background 0.15s, color 0.15s;
+  border-left: 3px solid transparent;
+}
+.navLink:hover { background: #1f2937; color: #fff }
+.active { background: #1f2937; color: #fff; border-left-color: #3b82f6 }
+.icon { font-size: 1rem; width: 18px; text-align: center }
+.footer { padding: 16px 20px; border-top: 1px solid #1f2937; }
+.userInfo { font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; }
+.userEmail { color: #d1d5db; font-size: 0.8rem; display: block; }
+.logoutBtn {
+  background: none; border: 1px solid #374151; color: #9ca3af;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+  width: 100%; transition: all 0.15s;
+}
+.logoutBtn:hover { background: #1f2937; color: #fff; border-color: #4b5563 }

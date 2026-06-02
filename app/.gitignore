@@ -1,0 +1,8 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+# Runtime settings are editable through the app UI and must stay local.
+/config/app-settings.local.json

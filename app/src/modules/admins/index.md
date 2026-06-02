@@ -1,0 +1,13 @@
+# admins Module
+
+Admin account management: create, list, update, and disable admins.
+
+## Folders
+
+| Folder | Purpose |
+|--------|---------|
+| api/ | NestJS controllers and module wiring |
+| usecases/ | Business actions, one use case per file |
+| dtos/ | Request and response DTOs shared by controllers and use cases |
+
+Update this file when routes, DTOs, use cases, or module boundaries change.
