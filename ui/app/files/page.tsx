@@ -6,7 +6,7 @@ import {
   MediaItem, Collection, PaginatedMedia,
 } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:10128";
 const MEDIA_TYPES = ["", "image", "video", "audio", "document", "archive", "other"];
 const STATUSES = ["", "Uploaded", "Cached"];
 const PAGE_SIZE = 20;
@@ -36,7 +36,7 @@ function resolveStrategy(item: MediaItem): string {
 
 type PreviewState =
   | { kind: "image" | "audio" | "video"; url: string; name: string }
-  | { kind: "text"; content: string; name: string }
+  | { kind: "text"; url: string; content: string; name: string }
   | null;
 
 export default function FilesPage() {
@@ -99,7 +99,7 @@ export default function FilesPage() {
         const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         const text = await res.text();
-        setPreview({ kind: "text", content: text, name: item.originalName });
+        setPreview({ kind: "text", url, content: text, name: item.originalName });
       } catch { alert("Failed to load text content."); }
     }
   };
