@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useAuth } from "@/lib/auth";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -18,9 +18,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   if (loading || !admin) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f3f4f6" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: "32px", overflow: "auto" }}>{children}</main>
+      <main style={{ flex: 1, padding: "32px 36px", overflow: "auto", minWidth: 0 }}>
+        {children}
+      </main>
     </div>
   );
 }

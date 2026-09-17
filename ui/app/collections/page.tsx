@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState } from "react";
 import {
   listCollections, createCollection, updateCollection, deleteCollection,
@@ -10,17 +10,15 @@ export default function CollectionsPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // collection form
   const [showColForm, setShowColForm] = useState(false);
   const [editingCol, setEditingCol] = useState<Collection | null>(null);
   const [colName, setColName] = useState("");
   const [colSaving, setColSaving] = useState(false);
   const [colError, setColError] = useState("");
 
-  // label form
   const [showLabelForm, setShowLabelForm] = useState(false);
   const [editingLabel, setEditingLabel] = useState<CollectionLabel | null>(null);
-  const [targetCollectionId, setTargetCollectionId] = useState("");
+  const [targetColId, setTargetColId] = useState("");
   const [labelValue, setLabelValue] = useState("");
   const [labelSaving, setLabelSaving] = useState(false);
   const [labelError, setLabelError] = useState("");
@@ -42,23 +40,19 @@ export default function CollectionsPage() {
   };
 
   const removeCol = async (c: Collection) => {
-    if (!confirm(`Delete collection "${c.name}"?`)) return;
+    if (!confirm(`Delete "${c.name}" and all its labels?`)) return;
     try { await deleteCollection(c.id); load(); }
-    catch (err: unknown) { alert(err instanceof Error ? err.message : "Delete failed"); }
+    catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
   };
 
-  const openAddLabel = (collectionId: string) => {
-    setEditingLabel(null); setTargetCollectionId(collectionId); setLabelValue(""); setLabelError(""); setShowLabelForm(true);
-  };
-  const openEditLabel = (l: CollectionLabel) => {
-    setEditingLabel(l); setTargetCollectionId(l.collectionId); setLabelValue(l.value); setLabelError(""); setShowLabelForm(true);
-  };
+  const openAddLabel = (colId: string) => { setEditingLabel(null); setTargetColId(colId); setLabelValue(""); setLabelError(""); setShowLabelForm(true); };
+  const openEditLabel = (l: CollectionLabel) => { setEditingLabel(l); setTargetColId(l.collectionId); setLabelValue(l.value); setLabelError(""); setShowLabelForm(true); };
 
   const saveLabel = async (e: React.FormEvent) => {
     e.preventDefault(); setLabelSaving(true); setLabelError("");
     try {
-      if (editingLabel) await updateCollectionLabel(targetCollectionId, editingLabel.id, { value: labelValue });
-      else await createCollectionLabel(targetCollectionId, labelValue);
+      if (editingLabel) await updateCollectionLabel(targetColId, editingLabel.id, { value: labelValue });
+      else await createCollectionLabel(targetColId, labelValue);
       setShowLabelForm(false); load();
     } catch (err: unknown) { setLabelError(err instanceof Error ? err.message : "Error"); }
     finally { setLabelSaving(false); }
@@ -67,43 +61,51 @@ export default function CollectionsPage() {
   const removeLabel = async (l: CollectionLabel) => {
     if (!confirm(`Delete label "${l.value}"?`)) return;
     try { await deleteCollectionLabel(l.collectionId, l.id); load(); }
-    catch (err: unknown) { alert(err instanceof Error ? err.message : "Delete failed"); }
+    catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="pageTitle" style={{ margin: 0 }}>Collections</h1>
-        <button className="btn btn-primary" onClick={openCreateCol}>+ New Collection</button>
+        <button className="btn btn-primary" onClick={openCreateCol}>New Collection</button>
       </div>
 
-      {loading ? <p style={{ color: "#6b7280" }}>Loading…</p> : collections.length === 0 ? (
-        <div className="card"><p style={{ color: "#6b7280", textAlign: "center", padding: "32px 0" }}>No collections yet.</p></div>
+      {loading ? (
+        <div style={{ color: "var(--text-2)", fontSize: "0.875rem" }}>Loading…</div>
+      ) : collections.length === 0 ? (
+        <div className="card" style={{ padding: "48px 0", textAlign: "center" }}>
+          <p style={{ color: "var(--text-2)", fontSize: "0.875rem" }}>No collections yet.</p>
+        </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {collections.map(col => (
             <div className="card" key={col.id}>
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <span style={{ fontWeight: 700, fontSize: "1rem" }}>{col.name}</span>
-                  <span style={{ color: "#9ca3af", fontSize: "0.8rem", marginLeft: 10 }}>{col.labels.length} labels</span>
+              <div className="section-header">
+                <div className="flex items-center gap-2">
+                  <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>{col.name}</span>
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>{col.labels.length} label{col.labels.length !== 1 ? "s" : ""}</span>
                 </div>
                 <div className="flex gap-2">
-                  <button className="btn btn-primary btn-sm" onClick={() => openAddLabel(col.id)}>+ Label</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openAddLabel(col.id)}>Add Label</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => openEditCol(col)}>Rename</button>
                   <button className="btn btn-danger btn-sm" onClick={() => removeCol(col)}>Delete</button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div style={{ padding: "14px 20px" }}>
                 {col.labels.length === 0 ? (
-                  <span style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No labels yet.</span>
-                ) : col.labels.map(l => (
-                  <div key={l.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 20, padding: "4px 10px 4px 12px", fontSize: "0.8rem" }}>
-                    <span style={{ fontWeight: 500 }}>{l.value}</span>
-                    <button onClick={() => openEditLabel(l)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: "0 2px", fontSize: "0.8rem" }} title="Edit">✎</button>
-                    <button onClick={() => removeLabel(l)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: "0 2px", fontSize: "0.8rem" }} title="Delete">×</button>
+                  <span style={{ color: "var(--text-3)", fontSize: "0.8rem" }}>No labels yet.</span>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {col.labels.map(l => (
+                      <div key={l.id} style={{ display: "inline-flex", alignItems: "center", gap: 2, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 8px 3px 10px", fontSize: "0.78rem" }}>
+                        <span style={{ color: "var(--text-2)" }}>{l.value}</span>
+                        <button onClick={() => openEditLabel(l)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: "0 3px", fontSize: "0.85rem", lineHeight: 1 }} title="Rename">✎</button>
+                        <button onClick={() => removeLabel(l)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: "0 2px", fontSize: "1rem", lineHeight: 1 }} title="Delete">×</button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           ))}
@@ -117,7 +119,7 @@ export default function CollectionsPage() {
             <form onSubmit={saveCol}>
               <div className="form-group">
                 <label>Name</label>
-                <input value={colName} onChange={e => setColName(e.target.value)} required autoFocus placeholder="e.g. mood" />
+                <input value={colName} onChange={e => setColName(e.target.value)} required autoFocus placeholder="e.g. Mood" />
               </div>
               {colError && <p className="error-msg mb-4">{colError}</p>}
               <div className="modal-footer">
@@ -132,14 +134,12 @@ export default function CollectionsPage() {
       {showLabelForm && (
         <div className="modal-overlay" onClick={() => setShowLabelForm(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">{editingLabel ? "Edit Label" : `Add Label to "${collections.find(c => c.id === targetCollectionId)?.name}"`}</div>
+            <div className="modal-title">{editingLabel ? "Edit Label" : `Add Label`}</div>
+            {!editingLabel && <p style={{ fontSize: "0.78rem", color: "var(--text-2)", marginBottom: 16, marginTop: -12 }}>in {collections.find(c => c.id === targetColId)?.name}</p>}
             <form onSubmit={saveLabel}>
               <div className="form-group">
                 <label>Value</label>
-                <input value={labelValue} onChange={e => setLabelValue(e.target.value)} required autoFocus placeholder={targetCollectionId && collections.find(c=>c.id===targetCollectionId)?.name === 'speed' ? 'e.g. 120bpm' : 'e.g. chill'} />
-                {collections.find(c => c.id === targetCollectionId)?.name === 'speed' && (
-                  <small style={{ color: "#6b7280", marginTop: 4, display: "block" }}>For custom BPM enter e.g. "120bpm"</small>
-                )}
+                <input value={labelValue} onChange={e => setLabelValue(e.target.value)} required autoFocus placeholder="e.g. chill" />
               </div>
               {labelError && <p className="error-msg mb-4">{labelError}</p>}
               <div className="modal-footer">

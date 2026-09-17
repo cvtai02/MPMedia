@@ -6,21 +6,14 @@ import {
   MediaItem, Collection, PaginatedMedia,
 } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:10128";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 const MEDIA_TYPES = ["", "image", "video", "audio", "document", "archive", "other"];
-const STATUSES = ["", "Uploaded", "Cached"];
 const PAGE_SIZE = 20;
 
-function formatBytes(n: number) {
+function fmtBytes(n: number) {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function statusBadge(s: string) {
-  if (s === "Cached") return <span className="badge badge-green">Cached</span>;
-  if (s === "Uploaded") return <span className="badge badge-blue">Uploaded</span>;
-  return <span className="badge badge-gray">{s}</span>;
+  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
 }
 
 function resolveStrategy(item: MediaItem): string {
@@ -39,14 +32,16 @@ type PreviewState =
   | { kind: "text"; url: string; content: string; name: string }
   | null;
 
+type Tab = "all" | "unlabeled";
+
 export default function FilesPage() {
   const [result, setResult] = useState<PaginatedMedia>({ data: [], total: 0, page: 1, limit: PAGE_SIZE });
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<Tab>("all");
   const [filterType, setFilterType] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -55,11 +50,11 @@ export default function FilesPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params: Record<string, string | number> = { page, limit: PAGE_SIZE };
+    const params: Record<string, string | number | boolean> = { page, limit: PAGE_SIZE };
     if (filterType) params.mediaType = filterType;
-    if (filterStatus) params.status = filterStatus;
+    if (tab === "unlabeled") params.unlabeled = true;
     listMedia(params).then(setResult).finally(() => setLoading(false));
-  }, [page, filterType, filterStatus]);
+  }, [page, filterType, tab]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { listCollections().then(setCollections); }, []);
@@ -88,19 +83,17 @@ export default function FilesPage() {
 
   const openFile = async (item: MediaItem) => {
     const strategy = resolveStrategy(item);
-    const url = `${API}/media/${item.id}/download`;
+    const url = `${API}/api/media/${item.id}/download`;
     if (strategy === "download") { window.location.href = url; return; }
     if (strategy === "new-tab") { window.open(url, "_blank"); return; }
     if (strategy === "image") { setPreview({ kind: "image", url, name: item.originalName }); return; }
     if (strategy === "audio") { setPreview({ kind: "audio", url, name: item.originalName }); return; }
     if (strategy === "video") { setPreview({ kind: "video", url, name: item.originalName }); return; }
     if (strategy === "text") {
-      try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        const text = await res.text();
-        setPreview({ kind: "text", url, content: text, name: item.originalName });
-      } catch { alert("Failed to load text content."); }
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const content = await res.text();
+      setPreview({ kind: "text", url, content, name: item.originalName });
     }
   };
 
@@ -111,71 +104,102 @@ export default function FilesPage() {
     else await assignCollectionLabel(selected.id, collectionLabelId);
     const fresh = await listMedia({ page, limit: PAGE_SIZE });
     setResult(fresh);
-    const updated = fresh.data.find(m => m.id === selected.id) ?? selected;
-    setSelected(updated);
+    setSelected(fresh.data.find(m => m.id === selected.id) ?? selected);
   };
 
+  const switchTab = (t: Tab) => { setTab(t); setPage(1); };
   const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="pageTitle" style={{ margin: 0 }}>Files <span style={{ color: "#6b7280", fontWeight: 400, fontSize: "1rem" }}>({result.total})</span></h1>
+        <div>
+          <h1 className="pageTitle" style={{ margin: 0 }}>Files</h1>
+        </div>
         <div className="flex gap-2">
           <input ref={fileRef} type="file" style={{ display: "none" }} onChange={upload} />
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? "Uploading…" : "+ Upload"}
+            {uploading ? "Uploading…" : "Upload"}
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <select className="btn btn-ghost btn-sm" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} style={{ padding: "6px 10px" }}>
-          {MEDIA_TYPES.map(t => <option key={t} value={t}>{t || "All types"}</option>)}
-        </select>
-        <select className="btn btn-ghost btn-sm" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }} style={{ padding: "6px 10px" }}>
-          {STATUSES.map(s => <option key={s} value={s}>{s || "All statuses"}</option>)}
-        </select>
-        {(filterType || filterStatus) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setFilterType(""); setFilterStatus(""); setPage(1); }}>Clear</button>
-        )}
+      <div className="flex justify-between items-center mb-4">
+        <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+          <button className={`tab ${tab === "all" ? "tab-active" : ""}`} onClick={() => switchTab("all")}>All</button>
+          <button className={`tab ${tab === "unlabeled" ? "tab-active" : ""}`} onClick={() => switchTab("unlabeled")}>Unlabeled</button>
+        </div>
+        <div className="flex gap-2 items-center">
+          <select
+            value={filterType}
+            onChange={e => { setFilterType(e.target.value); setPage(1); }}
+            style={{ padding: "5px 10px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-2)", fontSize: "0.78rem", outline: "none" }}
+          >
+            {MEDIA_TYPES.map(t => <option key={t} value={t}>{t || "All types"}</option>)}
+          </select>
+          {filterType && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setFilterType("")}>Clear</button>
+          )}
+        </div>
       </div>
 
       <div className="card">
-        {loading ? <p style={{ color: "#6b7280", padding: "20px 0" }}>Loading…</p> : result.data.length === 0 ? (
-          <p style={{ color: "#6b7280", textAlign: "center", padding: "40px 0" }}>No files found.</p>
+        {loading ? (
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-2)", fontSize: "0.875rem" }}>Loading…</div>
+        ) : result.data.length === 0 ? (
+          <div style={{ padding: "48px 0", textAlign: "center", color: "var(--text-2)", fontSize: "0.875rem" }}>No files found.</div>
         ) : (
           <>
             <table>
-              <thead><tr><th>Name</th><th>File Type</th><th>Size</th><th>Status</th><th>Labels</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                  <th>Labels</th>
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
                 {result.data.map(item => (
                   <tr key={item.id}>
-                    <td style={{ fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.originalName}>{item.originalName}</td>
+                    <td style={{ fontWeight: 500, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.originalName}>
+                      {item.originalName}
+                    </td>
                     <td>
                       {item.fileType
-                        ? <span className="badge badge-gray" title={`Open strategy: ${item.fileType.openStrategy}`}>{item.fileType.name}</span>
-                        : <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>{item.mediaType}</span>}
+                        ? <span className="badge badge-gray">{item.fileType.name}</span>
+                        : <span style={{ color: "var(--text-3)", fontSize: "0.78rem" }}>{item.mediaType}</span>}
                     </td>
-                    <td style={{ color: "#6b7280" }}>{formatBytes(item.sizeBytes)}</td>
-                    <td>{statusBadge(item.status)}</td>
+                    <td style={{ color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>{fmtBytes(item.sizeBytes)}</td>
                     <td>
-                      <div className="flex gap-1 flex-wrap">
+                      {item.status === "Cached"
+                        ? <span className="badge badge-green">Cached</span>
+                        : <span className="badge badge-gray">Uploaded</span>}
+                    </td>
+                    <td>
+                      <div className="flex gap-1 flex-wrap items-center">
                         {item.collectionLabels.map(l => (
-                          <span key={l.id} style={{ background: "#e0e7ff", color: "#3730a3", padding: "1px 7px", borderRadius: 999, fontSize: "0.72rem", fontWeight: 600 }}>{l.value}</span>
+                          <span key={l.id} style={{ background: "rgba(0,112,243,.12)", color: "#3b9eff", border: "1px solid rgba(0,112,243,.2)", padding: "1px 7px", borderRadius: 4, fontSize: "0.68rem", fontWeight: 500 }}>
+                            {l.value}
+                          </span>
                         ))}
-                        <button className="btn btn-ghost btn-sm" style={{ padding: "0 6px", fontSize: "0.8rem" }} onClick={() => { setSelected(item); setShowLabelModal(true); }}>🏷</button>
+                        <button
+                          onClick={() => { setSelected(item); setShowLabelModal(true); }}
+                          style={{ background: "none", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer", color: "var(--text-3)", padding: "1px 6px", fontSize: "0.7rem", lineHeight: 1.4 }}
+                          title="Edit labels"
+                        >+</button>
                       </div>
                     </td>
                     <td>
-                      <div className="flex gap-1" style={{ justifyContent: "flex-end" }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openFile(item)} title={`Open (${resolveStrategy(item)})`}>Open</button>
+                      <div className="flex gap-1 justify-end">
+                        <button className="btn btn-ghost btn-sm" onClick={() => openFile(item)}>Open</button>
                         {item.status === "Uploaded" && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => doCache(item)} disabled={actionLoading === item.id} title="Cache locally">📥</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => doCache(item)} disabled={actionLoading === item.id} title="Cache locally">Cache</button>
                         )}
                         {item.status === "Cached" && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => doClear(item)} disabled={actionLoading === item.id} title="Clear cache">🗑</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => doClear(item)} disabled={actionLoading === item.id} title="Clear cache">Uncache</button>
                         )}
                         <button className="btn btn-danger btn-sm" onClick={() => doDelete(item)} disabled={actionLoading === item.id}>Delete</button>
                       </div>
@@ -186,32 +210,29 @@ export default function FilesPage() {
             </table>
 
             {totalPages > 1 && (
-              <div className="flex gap-2 items-center mt-4" style={{ justifyContent: "flex-end" }}>
-                <button className="btn btn-ghost btn-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>Page {page} of {totalPages}</span>
-                <button className="btn btn-ghost btn-sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
+              <div className="flex gap-2 items-center justify-end" style={{ padding: "12px 16px", borderTop: "1px solid var(--border-subtle)" }}>
+                <button className="btn btn-ghost btn-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</button>
+                <span style={{ fontSize: "0.78rem", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>{page} / {totalPages}</span>
+                <button className="btn btn-ghost btn-sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* Preview modal */}
+      {result.total > 0 && (
+        <p style={{ marginTop: 10, fontSize: "0.75rem", color: "var(--text-3)" }}>{result.total} file{result.total !== 1 ? "s" : ""}</p>
+      )}
+
       {preview && (
         <div className="modal-overlay" onClick={() => setPreview(null)}>
-          <div className="modal" style={{ maxWidth: preview.kind === "text" ? 700 : 560 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-title" style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 12, wordBreak: "break-all" }}>{preview.name}</div>
-            {preview.kind === "image" && (
-              <img src={preview.url} alt={preview.name} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 8, display: "block", margin: "0 auto" }} />
-            )}
-            {preview.kind === "audio" && (
-              <audio controls src={preview.url} style={{ width: "100%" }} />
-            )}
-            {preview.kind === "video" && (
-              <video controls src={preview.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8 }} />
-            )}
+          <div className="modal" style={{ maxWidth: preview.kind === "text" ? 680 : 560 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-title" style={{ fontSize: "0.8rem", marginBottom: 14, color: "var(--text-2)", fontWeight: 400, wordBreak: "break-all" }}>{preview.name}</div>
+            {preview.kind === "image" && <img src={preview.url} alt={preview.name} style={{ maxWidth: "100%", maxHeight: "68vh", borderRadius: 6, display: "block", margin: "0 auto" }} />}
+            {preview.kind === "audio" && <audio controls src={preview.url} style={{ width: "100%" }} />}
+            {preview.kind === "video" && <video controls src={preview.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 6 }} />}
             {preview.kind === "text" && (
-              <pre style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: 16, overflow: "auto", maxHeight: "65vh", fontSize: "0.8rem", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              <pre style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)", borderRadius: 6, padding: 14, overflow: "auto", maxHeight: "62vh", fontSize: "0.78rem", color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                 {preview.content}
               </pre>
             )}
@@ -223,23 +244,23 @@ export default function FilesPage() {
         </div>
       )}
 
-      {/* Collection label modal */}
       {showLabelModal && selected && (
         <div className="modal-overlay" onClick={() => setShowLabelModal(false)}>
-          <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Labels — {selected.originalName}</div>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Labels</div>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-2)", marginBottom: 16, marginTop: -12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selected.originalName}</p>
             {collections.length === 0 ? (
-              <p style={{ color: "#6b7280" }}>No collections exist yet.</p>
+              <p style={{ color: "var(--text-2)", fontSize: "0.875rem" }}>No collections yet.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {collections.map(col => (
                   <div key={col.id}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{col.name}</div>
+                    <div style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>{col.name}</div>
                     <div className="flex flex-wrap gap-2">
                       {col.labels.map(l => {
-                        const has = selected.collectionLabels.some(sl => sl.id === l.id);
+                        const active = selected.collectionLabels.some(sl => sl.id === l.id);
                         return (
-                          <button key={l.id} onClick={() => toggleLabel(l.id)} style={{ padding: "4px 12px", borderRadius: 999, fontSize: "0.8rem", fontWeight: 500, cursor: "pointer", border: `1px solid ${has ? "#6366f1" : "#d1d5db"}`, background: has ? "#6366f1" : "#f9fafb", color: has ? "#fff" : "#374151" }}>
+                          <button key={l.id} onClick={() => toggleLabel(l.id)} style={{ padding: "4px 12px", borderRadius: 6, fontSize: "0.78rem", fontWeight: 500, cursor: "pointer", border: `1px solid ${active ? "#0070f3" : "var(--border)"}`, background: active ? "rgba(0,112,243,.15)" : "transparent", color: active ? "#3b9eff" : "var(--text-2)", transition: "all 0.12s" }}>
                             {l.value}
                           </button>
                         );

@@ -1,10 +1,9 @@
-﻿"use client";
+"use client";
 import { useState } from "react";
 import { login } from "@/lib/api";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("admin@mpmedia.local");
-  const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -12,33 +11,38 @@ export default function LoginPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      const { accessToken } = await login(email, password);
+      const { accessToken } = await login(token);
       localStorage.setItem("token", accessToken);
-      window.location.href = "/media";
+      window.location.href = "/files";
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Invalid token");
     } finally { setLoading(false); }
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f3f4f6" }}>
-      <div style={{ width: 380 }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "#111827" }}>MPMedia</div>
-          <div style={{ color: "#6b7280", marginTop: 4 }}>Sign in to continue</div>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
+      <div style={{ width: 340 }}>
+        <div style={{ marginBottom: 28, textAlign: "center" }}>
+          <div style={{ width: 36, height: 36, background: "#ededed", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: 800, color: "#000", margin: "0 auto 16px", letterSpacing: "-0.03em" }}>MP</div>
+          <div style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>MPMedia</div>
+          <div style={{ fontSize: "0.8rem", color: "var(--text-2)" }}>Enter your access token to continue</div>
         </div>
-        <div className="card">
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "24px" }}>
           <form onSubmit={submit}>
             <div className="form-group">
-              <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
-            </div>
-            <div className="form-group">
-              <label>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              <label>Access Token</label>
+              <input
+                type="password"
+                value={token}
+                onChange={e => setToken(e.target.value)}
+                required
+                autoFocus
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
             </div>
             {error && <p className="error-msg mb-4">{error}</p>}
-            <button className="btn btn-primary w-full" style={{ justifyContent: "center" }} disabled={loading}>
+            <button className="btn btn-primary w-full" style={{ justifyContent: "center", marginTop: 4 }} disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>

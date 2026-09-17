@@ -1,151 +1,108 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
-import {
-  listMedia, deleteMedia, listCollections, assignCollectionLabel, removeCollectionLabel,
-  MediaItem, Collection, PaginatedMedia,
-} from "@/lib/api";
+import { useEffect, useState } from "react";
+import { getUnlabeled, UnlabeledFileItem } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-const PAGE_SIZE = 20;
-
-function formatBytes(n: number) {
+function fmtBytes(n: number) {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
 }
 
 export default function UnlabeledPage() {
-  const [result, setResult] = useState<PaginatedMedia>({ data: [], total: 0, page: 1, limit: PAGE_SIZE });
-  const [collections, setCollections] = useState<Collection[]>([]);
+  const [items, setItems] = useState<UnlabeledFileItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<MediaItem | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  const load = useCallback(() => {
+  const load = () => {
     setLoading(true);
-    listMedia({ page, limit: PAGE_SIZE, unlabeled: true }).then(setResult).finally(() => setLoading(false));
-  }, [page]);
-
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { listCollections().then(setCollections); }, []);
-
-  const doDelete = async (item: MediaItem) => {
-    if (!confirm(`Delete "${item.originalName}"?`)) return;
-    setActionLoading(item.id);
-    try { await deleteMedia(item.id); load(); } finally { setActionLoading(null); }
+    setError("");
+    getUnlabeled()
+      .then((r) => { setItems(r.items); setTotal(r.total); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
   };
 
-  const toggleLabel = async (collectionLabelId: string) => {
-    if (!selected) return;
-    const has = selected.collectionLabels.some(l => l.id === collectionLabelId);
-    if (has) await removeCollectionLabel(selected.id, collectionLabelId);
-    else await assignCollectionLabel(selected.id, collectionLabelId);
-    // after assigning at least one label the file leaves this list; reload both
-    load();
-    const fresh = await listMedia({ page, limit: PAGE_SIZE, unlabeled: true });
-    const updated = fresh.data.find(m => m.id === selected.id);
-    setSelected(updated ?? null);
-    if (!updated) setSelected(null);
-  };
-
-  const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+  useEffect(() => { load(); }, []);
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="pageTitle" style={{ margin: 0 }}>
-          Unlabeled <span style={{ color: "#6b7280", fontWeight: 400, fontSize: "1rem" }}>({result.total})</span>
-        </h1>
+        <h1 className="pageTitle" style={{ margin: 0 }}>Unlabeled</h1>
+        <button className="btn btn-ghost" onClick={load} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
+        </button>
       </div>
+
+      {error && <p className="error-msg mb-4">{error}</p>}
 
       <div className="card">
         {loading ? (
-          <p style={{ color: "#6b7280", padding: "20px 0" }}>Loading…</p>
-        ) : result.data.length === 0 ? (
-          <p style={{ color: "#6b7280", textAlign: "center", padding: "40px 0" }}>All files have labels.</p>
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-2)", fontSize: "0.875rem" }}>
+            Fetching files from storage…
+          </div>
+        ) : items.length === 0 ? (
+          <div style={{ padding: "48px 0", textAlign: "center", color: "var(--text-2)", fontSize: "0.875rem" }}>
+            {error ? null : "All files in storage are labeled."}
+          </div>
         ) : (
           <>
+            <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)", fontSize: "0.78rem", color: "var(--text-3)" }}>
+              {total} unlabeled {total === 1 ? "file" : "files"}
+            </div>
             <table>
               <thead>
-                <tr><th>Name</th><th>Type</th><th>Size</th><th></th></tr>
+                <tr>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                  <th>Type</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
-                {result.data.map(item => (
-                  <tr key={item.id}>
-                    <td style={{ fontWeight: 500, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.originalName}>
-                      {item.originalName}
+                {items.map((item) => (
+                  <tr key={item.absolutePath}>
+                    <td style={{ fontWeight: 500, maxWidth: 340 }}>
+                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.absolutePath}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.absolutePath}
+                      </div>
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>{fmtBytes(item.sizeBytes)}</td>
+                    <td>
+                      {item.tracked
+                        ? <span className="badge badge-green">{item.mediaItem?.status ?? "Tracked"}</span>
+                        : <span className="badge badge-gray">Untracked</span>}
                     </td>
                     <td>
-                      {item.fileType
-                        ? <span className="badge badge-gray">{item.fileType.name}</span>
-                        : <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>{item.mediaType}</span>}
+                      {item.mediaItem
+                        ? <span className="badge badge-gray">{item.mediaItem.mediaType}</span>
+                        : <span style={{ color: "var(--text-3)", fontSize: "0.8rem" }}>—</span>}
                     </td>
-                    <td style={{ color: "#6b7280" }}>{formatBytes(item.sizeBytes)}</td>
                     <td>
-                      <div className="flex gap-1" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => setSelected(item)}
-                        >
-                          Assign labels
-                        </button>
-                        <a
-                          href={`${API}/media/${item.id}/download`}
-                          target="_blank" rel="noreferrer"
-                          className="btn btn-ghost btn-sm"
-                        >↓</a>
-                        <button className="btn btn-danger btn-sm" onClick={() => doDelete(item)} disabled={actionLoading === item.id}>Delete</button>
+                      <div className="flex gap-2 justify-end">
+                        {item.cdnUrl && (
+                          <a
+                            href={item.cdnUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-ghost btn-sm"
+                          >
+                            Open
+                          </a>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-
-            {totalPages > 1 && (
-              <div className="flex gap-2 items-center mt-4" style={{ justifyContent: "flex-end" }}>
-                <button className="btn btn-ghost btn-sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>Page {page} of {totalPages}</span>
-                <button className="btn btn-ghost btn-sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-              </div>
-            )}
           </>
         )}
       </div>
-
-      {/* Label assignment panel */}
-      {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Assign labels — {selected.originalName}</div>
-            {collections.length === 0 ? (
-              <p style={{ color: "#6b7280" }}>No collections exist yet.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {collections.map(col => (
-                  <div key={col.id}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{col.name}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {col.labels.map(l => {
-                        const has = selected.collectionLabels.some(sl => sl.id === l.id);
-                        return (
-                          <button key={l.id} onClick={() => toggleLabel(l.id)} style={{ padding: "4px 12px", borderRadius: 999, fontSize: "0.8rem", fontWeight: 500, cursor: "pointer", border: `1px solid ${has ? "#6366f1" : "#d1d5db"}`, background: has ? "#6366f1" : "#f9fafb", color: has ? "#fff" : "#374151" }}>
-                            {l.value}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setSelected(null)}>Done</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
